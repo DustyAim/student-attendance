@@ -266,7 +266,7 @@ const DAY_NAMES = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
 // вторник 1 сентября 2026 года
 const SEMESTER_START = new Date(2026, 8, 1);
 
-let state = { students: [], schedule: [], absences: [], settings: {} };
+let state = { students: [], schedule: [], presences: [], settings: {} };
 let currentMonday = getMonday(new Date());
 let currentFilter = 'calc'; // all | calc | safety — какое расписание показываем
 
@@ -312,7 +312,10 @@ async function loadData(){
     return;
   }
   try{
-    const res = await fetch(APPS_SCRIPT_URL);
+    // cache-busting: Google кэширует ответы веб-приложения по URL,
+    // поэтому без уникального параметра все получали старые данные
+    const url = APPS_SCRIPT_URL + (APPS_SCRIPT_URL.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now();
+    const res = await fetch(url, { cache: 'no-store' });
     const data = await res.json();
     state = data;
     hideBanner();
@@ -393,12 +396,12 @@ document.getElementById('weekLabel').innerHTML =
 
     const aStudents = audienceStudents(entry);
     const total = aStudents.length;
-    const absentList = state.absences.filter(a =>
-      a.date === dateIso && String(a.scheduleId) === String(entry.id) &&
-      aStudents.some(s => s.name === a.student)
-    ).map(a => a.student);
-    const present = total - absentList.length;
-    const ratio = total > 0 ? present/total : 1;
+    const presentList = state.presences.filter(p =>
+      p.date === dateIso && String(p.scheduleId) === String(entry.id) &&
+      aStudents.some(s => s.name === p.student)
+    ).map(p => p.student);
+    const present = presentList.length;
+    const ratio = total > 0 ? present/total : 0;
     const status = ratio < critical ? 'critical' : (ratio < threshold ? 'warn' : 'ok');
 
     const typeClass = {
@@ -416,7 +419,7 @@ document.getElementById('weekLabel').innerHTML =
     '<div class="subj">' + entry.subject + '</div>' +
     '<div class="time mono">' + entry.start + '–' + entry.end + '</div>' +
     '<div class="count mono">' + present + '/' + total + '</div>';
-  card.addEventListener('click', () => openModal(entry, dateIso, dateObj, absentList, aStudents));
+  card.addEventListener('click', () => openModal(entry, dateIso, dateObj, presentList, aStudents));
 
     const col = document.querySelector('.daycol[data-day="'+wd+'"]');
     if(col) col.appendChild(card);
@@ -431,7 +434,7 @@ function fmtRange(mon, sun){
   return mon.getDate()+" "+months[mon.getMonth()]+" – "+sun.getDate()+" "+months[sun.getMonth()]+" "+sun.getFullYear();
 }
 
-function openModal(entry, dateIso, dateObj, absentList, aStudents){
+function openModal(entry, dateIso, dateObj, presentList, aStudents){
   const overlay = document.getElementById('overlay');
   document.getElementById('modalSubject').textContent = entry.subject;
   const weekdayFull = ["понедельник","вторник","среда","четверг","пятница","суббота","воскресенье"][dateObj.getDay() === 0 ? 6 : dateObj.getDay()-1];
@@ -440,10 +443,10 @@ function openModal(entry, dateIso, dateObj, absentList, aStudents){
 
   const list = document.getElementById('modalList');
   list.innerHTML = "";
-  let absentSet = new Set(absentList);
+  let presentSet = new Set(presentList);
 
   function refreshCount(){
-    const present = aStudents.length - absentSet.size;
+    const present = presentSet.size;
     document.getElementById('modalCount').textContent = present + "/" + aStudents.length;
   }
 
@@ -451,27 +454,27 @@ function openModal(entry, dateIso, dateObj, absentList, aStudents){
     const name = s.name;
     const row = document.createElement('div');
     row.className = 'row';
-    const isAbsent = absentSet.has(name);
+    const isPresent = presentSet.has(name);
     row.innerHTML = '<span class="name">' + name + '</span>' +
-      '<span class="pill ' + (isAbsent ? 'absent' : 'present') + '">' + (isAbsent ? 'пропускает' : 'придёт') + '</span>';
+      '<span class="pill ' + (isPresent ? 'present' : 'absent') + '">' + (isPresent ? 'придёт' : 'отсутствует') + '</span>';
     row.addEventListener('click', async () => {
-      const nowAbsent = !absentSet.has(name);
-      if(nowAbsent) absentSet.add(name); else absentSet.delete(name);
+      const nowPresent = !presentSet.has(name);
+      if(nowPresent) presentSet.add(name); else presentSet.delete(name);
       const pill = row.querySelector('.pill');
-      pill.className = 'pill ' + (nowAbsent ? 'absent' : 'present');
-      pill.textContent = nowAbsent ? 'пропускает' : 'придёт';
+      pill.className = 'pill ' + (nowPresent ? 'present' : 'absent');
+      pill.textContent = nowPresent ? 'придёт' : 'отсутствует';
       refreshCount();
 
       // optimistic local update + sync to backend
-      state.absences = state.absences.filter(a => !(a.date===dateIso && String(a.scheduleId)===String(entry.id) && a.student===name));
-      if(nowAbsent) state.absences.push({date:dateIso, scheduleId:entry.id, student:name});
+      state.presences = state.presences.filter(p => !(p.date===dateIso && String(p.scheduleId)===String(entry.id) && p.student===name));
+      if(nowPresent) state.presences.push({date:dateIso, scheduleId:entry.id, student:name});
       render();
 
       try{
         await fetch(APPS_SCRIPT_URL, {
           method:'POST',
           headers:{'Content-Type':'text/plain;charset=utf-8'},
-          body: JSON.stringify({action:'toggle', date:dateIso, scheduleId:entry.id, student:name, present: !nowAbsent})
+          body: JSON.stringify({action:'toggle', date:dateIso, scheduleId:entry.id, student:name, present: nowPresent})
         });
       }catch(err){
         showBanner("Не удалось сохранить отметку — проверь соединение и попробуй ещё раз.");
