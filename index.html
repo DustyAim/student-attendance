@@ -46,6 +46,31 @@
   .navbtn:hover{border-color:var(--text-dim);}
   .weeklabel{font-size:15px;letter-spacing:.2px;}
   .weeklabel .sub{color:var(--text-dim);font-size:12.5px;margin-left:8px;}
+  .week-info{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    margin-top:6px;
+  }
+
+  .study-week{
+    display:inline-flex;
+    align-items:center;
+    padding:5px 10px;
+    border-radius:7px;
+    background:rgba(74,222,128,.14);
+    border:1px solid rgba(74,222,128,.45);
+    color:#86efac;
+    font-size:13px;
+    font-weight:800;
+    letter-spacing:.04em;
+  }
+
+  .week-type{
+    color:var(--text-dim);
+    font-size:12px;
+  }
   .todaybtn{
     border:1px solid var(--panel-border);background:transparent;color:var(--text-dim);
     padding:7px 14px;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit;
@@ -189,10 +214,9 @@
     <span><span class="dot" style="background:var(--critical)"></span>очень мало людей</span>
   </div>
   <div class="audience-toggle" id="audienceToggle">
-    <button data-aud="all" class="active">Все</button>
-    <button data-aud="calc">Расчётчики</button>
+    <button data-aud="calc" class="active">Расчётчики</button>
     <button data-aud="safety">Безопасники</button>
-  </div>
+</div>
   <button class="todaybtn" id="todayBtn">Сегодня</button>
 </header>
 
@@ -244,7 +268,7 @@ const SEMESTER_START = new Date(2026, 8, 1);
 
 let state = { students: [], schedule: [], absences: [], settings: {} };
 let currentMonday = getMonday(new Date());
-let currentFilter = 'all'; // all | calc | safety — какое расписание показываем
+let currentFilter = 'calc'; // all | calc | safety — какое расписание показываем
 
 function audienceStudents(entry){
   if(entry.audience === 'military') return state.students.filter(s => s.military);
@@ -329,7 +353,10 @@ function render(){
 
 document.getElementById('weekLabel').innerHTML =
   fmtRange(currentMonday, sunday) +
-  '<span class="sub">Учебная неделя ' + studyWeek + ' · ' + label + '</span>';
+  '<span class="sub week-info">' +
+    '<span class="study-week">УЧЕБНАЯ НЕДЕЛЯ ' + studyWeek + '</span>' +
+    '<span class="week-type">' + label + '</span>' +
+  '</span>';
 
   const dn = document.getElementById('daynames');
   dn.innerHTML = "<div></div>";
