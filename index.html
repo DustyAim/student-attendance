@@ -16,8 +16,10 @@
     --text-dim:#8CA0AA;
     --warn:#E8A33D;
     --ok:#4FD1C5;
+    --critical:#E5533D;
     --warn-bg:rgba(232,163,61,0.10);
     --ok-bg:rgba(79,209,197,0.08);
+    --critical-bg:rgba(229,83,61,0.14);
   }
   *{box-sizing:border-box;}
   html,body{height:100%;}
@@ -90,12 +92,22 @@
   .card:hover{transform:translateY(-1px);border-color:var(--text-dim);}
   .card.warn{border-left-color:var(--warn);background:linear-gradient(var(--warn-bg),var(--warn-bg)),var(--panel);}
   .card.ok{border-left-color:var(--ok);background:linear-gradient(var(--ok-bg),var(--ok-bg)),var(--panel);}
+  .card.critical{border-left-color:var(--critical);background:linear-gradient(var(--critical-bg),var(--critical-bg)),var(--panel);
+    box-shadow:0 0 0 1px rgba(229,83,61,0.35) inset;}
   .card .subj{font-size:12px;line-height:1.25;font-weight:500;color:var(--text);
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
   .card .time{font-size:10.5px;color:var(--text-dim);margin-top:3px;}
   .card .count{font-size:11px;margin-top:3px;font-weight:500;}
   .card.warn .count{color:var(--warn);}
   .card.ok .count{color:var(--ok);}
+  .card.critical .count{color:var(--critical);}
+
+  .audience-toggle{display:flex;gap:4px;background:var(--panel);border:1px solid var(--panel-border);border-radius:8px;padding:3px;}
+  .audience-toggle button{
+    border:none;background:transparent;color:var(--text-dim);font-family:inherit;font-size:12.5px;
+    padding:6px 12px;border-radius:6px;cursor:pointer;
+  }
+  .audience-toggle button.active{background:var(--panel-border);color:var(--text);}
 
   /* modal */
   .overlay{
@@ -148,6 +160,12 @@
   <div class="legend">
     <span><span class="dot" style="background:var(--ok)"></span>достаточно людей</span>
     <span><span class="dot" style="background:var(--warn)"></span>нужно больше людей</span>
+    <span><span class="dot" style="background:var(--critical)"></span>очень мало людей</span>
+  </div>
+  <div class="audience-toggle" id="audienceToggle">
+    <button data-aud="all" class="active">Все</button>
+    <button data-aud="calc">Расчётчики</button>
+    <button data-aud="safety">Безопасники</button>
   </div>
   <button class="todaybtn" id="todayBtn">Сегодня</button>
 </header>
@@ -187,7 +205,7 @@
 <script>
 // ======= НАСТРОЙКА =======
 // Вставь сюда URL своего развёрнутого Apps Script веб-приложения (после деплоя Code.gs)
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx4rys1PUkojGcmTGd_g6EP_G_qT_S8WIQFCpTOcwD-F_qDSYosoJSFuc54PkRaMABvng/exec";
+const APPS_SCRIPT_URL = "ВСТАВЬ_СЮДА_URL_ПОСЛЕ_ДЕПЛОЯ";
 // ==========================
 
 const DAY_START = 7 * 60;   // 07:00 в минутах
@@ -197,6 +215,14 @@ const DAY_NAMES = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
 
 let state = { students: [], schedule: [], absences: [], settings: {} };
 let currentMonday = getMonday(new Date());
+let currentFilter = 'all'; // all | calc | safety — какое расписание показываем
+
+function audienceStudents(entry){
+  if(entry.audience === 'military') return state.students.filter(s => s.military);
+  if(entry.audience === 'calc') return state.students.filter(s => s.category === 'расчетчики');
+  if(entry.audience === 'safety') return state.students.filter(s => s.category === 'безопасники');
+  return state.students;
+}
 
 function pad(n){ return n < 10 ? "0"+n : ""+n; }
 function isoDate(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
@@ -278,10 +304,15 @@ function render(){
   cols.forEach(c => c.innerHTML = "");
 
   const threshold = Number(state.settings.threshold_ratio || 0.6);
-  const total = state.students.length;
+  const critical = Number(state.settings.critical_ratio || 0.35);
 
   state.schedule.forEach(entry => {
     if(entry.weekType !== 'both' && entry.weekType !== weekType) return;
+    // фильтр "чьё расписание смотрим": свои пары другой категории скрываем,
+    // общие (all) и военку показываем всегда
+    if(currentFilter === 'calc' && entry.audience === 'safety') return;
+    if(currentFilter === 'safety' && entry.audience === 'calc') return;
+
     const wd = Number(entry.weekday); // 1..7
     const dateObj = addDays(currentMonday, wd - 1);
     const dateIso = isoDate(dateObj);
@@ -289,12 +320,15 @@ function render(){
     const endMin = toMinutes(entry.end);
     if(endMin <= DAY_START || startMin >= DAY_END) return;
 
+    const aStudents = audienceStudents(entry);
+    const total = aStudents.length;
     const absentList = state.absences.filter(a =>
-      a.date === dateIso && String(a.scheduleId) === String(entry.id)
+      a.date === dateIso && String(a.scheduleId) === String(entry.id) &&
+      aStudents.some(s => s.name === a.student)
     ).map(a => a.student);
     const present = total - absentList.length;
     const ratio = total > 0 ? present/total : 1;
-    const status = ratio < threshold ? 'warn' : 'ok';
+    const status = ratio < critical ? 'critical' : (ratio < threshold ? 'warn' : 'ok');
 
     const card = document.createElement('div');
     card.className = 'card ' + status;
@@ -304,7 +338,7 @@ function render(){
       '<div class="subj">' + entry.subject + '</div>' +
       '<div class="time mono">' + entry.start + '–' + entry.end + '</div>' +
       '<div class="count mono">' + present + '/' + total + '</div>';
-    card.addEventListener('click', () => openModal(entry, dateIso, dateObj, absentList));
+    card.addEventListener('click', () => openModal(entry, dateIso, dateObj, absentList, aStudents));
 
     const col = document.querySelector('.daycol[data-day="'+wd+'"]');
     if(col) col.appendChild(card);
@@ -319,7 +353,7 @@ function fmtRange(mon, sun){
   return mon.getDate()+" "+months[mon.getMonth()]+" – "+sun.getDate()+" "+months[sun.getMonth()]+" "+sun.getFullYear();
 }
 
-function openModal(entry, dateIso, dateObj, absentList){
+function openModal(entry, dateIso, dateObj, absentList, aStudents){
   const overlay = document.getElementById('overlay');
   document.getElementById('modalSubject').textContent = entry.subject;
   const weekdayFull = ["понедельник","вторник","среда","четверг","пятница","суббота","воскресенье"][dateObj.getDay() === 0 ? 6 : dateObj.getDay()-1];
@@ -331,11 +365,12 @@ function openModal(entry, dateIso, dateObj, absentList){
   let absentSet = new Set(absentList);
 
   function refreshCount(){
-    const present = state.students.length - absentSet.size;
-    document.getElementById('modalCount').textContent = present + "/" + state.students.length;
+    const present = aStudents.length - absentSet.size;
+    document.getElementById('modalCount').textContent = present + "/" + aStudents.length;
   }
 
-  state.students.forEach(name => {
+  aStudents.forEach(s => {
+    const name = s.name;
     const row = document.createElement('div');
     row.className = 'row';
     const isAbsent = absentSet.has(name);
@@ -380,6 +415,14 @@ document.getElementById('overlay').addEventListener('click', (e) => {
 document.getElementById('prevBtn').addEventListener('click', () => { currentMonday = addDays(currentMonday, -7); render(); });
 document.getElementById('nextBtn').addEventListener('click', () => { currentMonday = addDays(currentMonday, 7); render(); });
 document.getElementById('todayBtn').addEventListener('click', () => { currentMonday = getMonday(new Date()); render(); });
+
+document.getElementById('audienceToggle').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-aud]');
+  if(!btn) return;
+  currentFilter = btn.dataset.aud;
+  document.querySelectorAll('#audienceToggle button').forEach(b => b.classList.toggle('active', b === btn));
+  render();
+});
 
 loadData();
 </script>
