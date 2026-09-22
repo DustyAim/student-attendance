@@ -209,9 +209,106 @@
   .closebtn:hover{border-color:var(--text-dim);}
 
   .empty-note{padding:40px 24px;color:var(--text-dim);font-size:13.5px;text-align:center;}
+
+  .login-overlay{
+  position:fixed;
+  inset:0;
+  background:var(--bg);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:100;
+  padding:20px;
+}
+
+.login-box{
+  width:100%;
+  max-width:360px;
+  background:var(--panel);
+  border:1px solid var(--panel-border);
+  border-radius:12px;
+  padding:24px;
+}
+
+.login-box h2{
+  margin:0 0 20px;
+  font-size:18px;
+}
+
+.login-box input{
+  width:100%;
+  padding:10px 12px;
+  margin-bottom:12px;
+  border:1px solid var(--panel-border);
+  border-radius:8px;
+  background:var(--bg);
+  color:var(--text);
+  font-family:inherit;
+  outline:none;
+  box-sizing:border-box;
+}
+
+.login-box input:focus{
+  border-color:var(--text-dim);
+}
+
+.login-btn{
+  width:100%;
+  padding:10px;
+  border:1px solid var(--panel-border);
+  border-radius:8px;
+  background:var(--panel-border);
+  color:var(--text);
+  font-family:inherit;
+  cursor:pointer;
+}
+
+.login-btn:hover{
+  border-color:var(--text-dim);
+}
+
+.login-error{
+  display:none;
+  color:var(--critical);
+  font-size:13px;
+  margin-bottom:12px;
+}
+
+.row.locked{
+  cursor:default;
+  opacity:.55;
+}
+
+.row.locked:hover{
+  background:transparent;
+}
+
 </style>
 </head>
 <body>
+  <div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <h2>Вход</h2>
+
+    <div class="login-error" id="loginError"></div>
+
+    <input
+      type="text"
+      id="loginUsername"
+      placeholder="Логин"
+      autocomplete="username"
+    >
+
+    <input
+      type="password"
+      id="loginPassword"
+      placeholder="Пароль"
+      autocomplete="current-password"
+    >
+
+    <button class="login-btn" id="loginBtn">Войти</button>
+  </div>
+</div>
 
 <header>
   <div class="nav">
@@ -278,8 +375,9 @@ const DAY_NAMES = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
 const SEMESTER_START = new Date(2026, 8, 1);
 
 let state = { students: [], schedule: [], presences: [], settings: {} };
+let currentUser = null;
 let currentMonday = getMonday(new Date());
-let currentFilter = 'calc'; // all | calc | safety — какое расписание показываем
+let currentFilter = 'calc';
 
 function audienceStudents(entry){
   if(entry.audience === 'military') return state.students.filter(s => s.military);
@@ -316,6 +414,50 @@ function weekTypeFor(monday){
   const other = refType === "A" ? "B" : "A";
   return (((diffWeeks % 2)+2) % 2 === 0) ? refType : other;
 }
+async function login(){
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+
+  const error = document.getElementById('loginError');
+
+  if(!username || !password){
+    error.textContent = 'Введите логин и пароль';
+    error.style.display = 'block';
+    return;
+  }
+
+  try{
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({
+        action:'login',
+        username:username,
+        password:password
+      })
+    });
+
+    const data = await res.json();
+
+    if(!data.ok){
+      error.textContent = data.error || 'Не удалось войти';
+      error.style.display = 'block';
+      return;
+    }
+
+    currentUser = data.user;
+
+    document.getElementById('loginOverlay').style.display = 'none';
+
+    await loadData();
+
+  }catch(err){
+    error.textContent = 'Не удалось связаться с сервером';
+    error.style.display = 'block';
+  }
+}
+
+
 
 async function loadData(){
   if(!APPS_SCRIPT_URL || APPS_SCRIPT_URL.indexOf("ВСТАВЬ_СЮДА") === 0){
@@ -335,6 +477,13 @@ async function loadData(){
     showBanner("Не получилось загрузить данные. Проверь, что Apps Script развёрнут с доступом «Все» и URL указан верно.");
   }
 }
+
+document.getElementById('loginBtn').addEventListener('click', login);
+
+document.getElementById('loginPassword').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter') login();
+});
+
 
 function showBanner(msg){
   const b = document.getElementById('status-banner');
@@ -463,12 +612,23 @@ function openModal(entry, dateIso, dateObj, presentList, aStudents){
 
   aStudents.forEach(s => {
     const name = s.name;
+
+    const canEdit =
+      currentUser &&
+      (
+        currentUser.role === 'admin' ||
+        currentUser.student === name
+      );
+
     const row = document.createElement('div');
-    row.className = 'row';
+    row.className = 'row' + (canEdit ? '' : ' locked');
     const isPresent = presentSet.has(name);
     row.innerHTML = '<span class="name">' + name + '</span>' +
       '<span class="pill ' + (isPresent ? 'present' : 'absent') + '">' + (isPresent ? 'придёт' : 'отсутствует') + '</span>';
     row.addEventListener('click', async () => {
+
+      if(!canEdit) return;
+
       const nowPresent = !presentSet.has(name);
       if(nowPresent) presentSet.add(name); else presentSet.delete(name);
       const pill = row.querySelector('.pill');
@@ -482,14 +642,63 @@ function openModal(entry, dateIso, dateObj, presentList, aStudents){
       render();
 
       try{
-        await fetch(APPS_SCRIPT_URL, {
+        const res = await fetch(APPS_SCRIPT_URL, {
           method:'POST',
           headers:{'Content-Type':'text/plain;charset=utf-8'},
-          body: JSON.stringify({action:'toggle', date:dateIso, scheduleId:entry.id, student:name, present: nowPresent})
+          body: JSON.stringify({
+            action:'toggle',
+            username:currentUser.username,
+            date:dateIso,
+            scheduleId:entry.id,
+            student:name,
+            present:nowPresent
+          })
         });
+
+        const data = await res.json();
+
+        if(!data.ok){
+          showBanner(data.error || "Не удалось сохранить отметку.");
+
+          // Возвращаем состояние обратно,
+          // если сервер отказал в изменении.
+          if(nowPresent){
+            state.presences = state.presences.filter(p =>
+              !(p.date === dateIso &&
+                String(p.scheduleId) === String(entry.id) &&
+                p.student === name)
+            );
+          }else{
+            state.presences.push({
+              date:dateIso,
+              scheduleId:entry.id,
+              student:name
+            });
+          }
+
+          render();
+        }
+
       }catch(err){
         showBanner("Не удалось сохранить отметку — проверь соединение и попробуй ещё раз.");
+
+      if(nowPresent){
+        state.presences = state.presences.filter(p =>
+          !(p.date === dateIso &&
+          String(p.scheduleId) === String(entry.id) &&
+          p.student === name)
+        );
+      }else{
+        state.presences.push({
+          date:dateIso,
+          scheduleId:entry.id,
+          student:name
+        });
       }
+
+      render();
+    
+    }   
     });
     list.appendChild(row);
   });
@@ -516,7 +725,6 @@ document.getElementById('audienceToggle').addEventListener('click', (e) => {
   render();
 });
 
-loadData();
 </script>
 </body>
 </html>
