@@ -89,11 +89,37 @@
     border-radius:7px;padding:6px 8px;overflow:hidden;cursor:pointer;
     transition:transform .1s ease;
   }
-  .card:hover{transform:translateY(-1px);border-color:var(--text-dim);}
-  .card.warn{border-left-color:var(--warn);background:linear-gradient(var(--warn-bg),var(--warn-bg)),var(--panel);}
-  .card.ok{border-left-color:var(--ok);background:linear-gradient(var(--ok-bg),var(--ok-bg)),var(--panel);}
-  .card.critical{border-left-color:var(--critical);background:linear-gradient(var(--critical-bg),var(--critical-bg)),var(--panel);
-    box-shadow:0 0 0 1px rgba(229,83,61,0.35) inset;}
+  .card:hover{
+  transform:translateY(-1px);
+  border-color:var(--text-dim);
+  }
+
+/* Статус явки — влияет на фон */
+  .card.warn{
+    background:linear-gradient(var(--warn-bg),var(--warn-bg)),var(--panel);
+  }
+
+  .card.ok{
+    background:linear-gradient(var(--ok-bg),var(--ok-bg)),var(--panel);
+  }
+
+  .card.critical{
+    background:linear-gradient(var(--critical-bg),var(--critical-bg)),var(--panel);
+    box-shadow:0 0 0 1px rgba(229,83,61,0.35) inset;
+  }
+
+  /* Тип занятия — влияет на левую полоску */
+  .card.lecture{
+    border-left-color:#4ade80;
+  }
+
+  .card.seminar{
+    border-left-color:#f472b6;
+  }
+
+  .card.lab{
+    border-left-color:#7dd3fc;
+  }
   .card .subj{font-size:12px;line-height:1.25;font-weight:500;color:var(--text);
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
   .card .time{font-size:10.5px;color:var(--text-dim);margin-top:3px;}
@@ -212,6 +238,9 @@ const DAY_START = 7 * 60;   // 07:00 в минутах
 const DAY_END = 21 * 60;    // 21:00 в минутах
 const PX_PER_MIN = 1;
 const DAY_NAMES = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+// Начало отсчёта учебных недель:
+// вторник 1 сентября 2026 года
+const SEMESTER_START = new Date(2026, 8, 1);
 
 let state = { students: [], schedule: [], absences: [], settings: {} };
 let currentMonday = getMonday(new Date());
@@ -228,10 +257,18 @@ function pad(n){ return n < 10 ? "0"+n : ""+n; }
 function isoDate(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
 function getMonday(d){
   const x = new Date(d);
-  const day = (x.getDay() + 6) % 7; // 0=Пн
+  const day = (x.getDay() + 6) % 7;
   x.setDate(x.getDate() - day);
   x.setHours(0,0,0,0);
   return x;
+}
+
+function studyWeekNumber(monday){
+  const startMonday = getMonday(SEMESTER_START);
+  const diffMs = monday - startMonday;
+  const diffWeeks = Math.round(diffMs / (7 * 86400000));
+
+  return diffWeeks + 1;
 }
 function addDays(d, n){ const x = new Date(d); x.setDate(x.getDate()+n); return x; }
 function toMinutes(hhmm){ const [h,m] = hhmm.split(":").map(Number); return h*60+m; }
@@ -283,9 +320,16 @@ function buildGutter(){
 function render(){
   const weekType = weekTypeFor(currentMonday);
   const sunday = addDays(currentMonday, 6);
-  const label = state.settings[weekType === "A" ? "week_a_label" : "week_b_label"] || ("Неделя " + weekType);
-  document.getElementById('weekLabel').innerHTML =
-    fmtRange(currentMonday, sunday) + '<span class="sub">' + label + '</span>';
+
+  const studyWeek = studyWeekNumber(currentMonday);
+
+  const label =
+    state.settings[weekType === "A" ? "week_a_label" : "week_b_label"]
+    || ("Неделя " + weekType);
+
+document.getElementById('weekLabel').innerHTML =
+  fmtRange(currentMonday, sunday) +
+  '<span class="sub">Учебная неделя ' + studyWeek + ' · ' + label + '</span>';
 
   const dn = document.getElementById('daynames');
   dn.innerHTML = "<div></div>";
@@ -330,15 +374,22 @@ function render(){
     const ratio = total > 0 ? present/total : 1;
     const status = ratio < critical ? 'critical' : (ratio < threshold ? 'warn' : 'ok');
 
+    const typeClass = {
+      lecture: 'lecture',
+      seminar: 'seminar',
+      lab: 'lab'
+    }[String(entry.type || '').toLowerCase()] || 'lecture';
+
     const card = document.createElement('div');
-    card.className = 'card ' + status;
+    card.className = 'card ' + status + ' ' + typeClass;
     card.style.top = ((startMin - DAY_START) * PX_PER_MIN) + "px";
     card.style.height = Math.max(30, (endMin - startMin) * PX_PER_MIN - 2) + "px";
-    card.innerHTML =
-      '<div class="subj">' + entry.subject + '</div>' +
-      '<div class="time mono">' + entry.start + '–' + entry.end + '</div>' +
-      '<div class="count mono">' + present + '/' + total + '</div>';
-    card.addEventListener('click', () => openModal(entry, dateIso, dateObj, absentList, aStudents));
+
+  card.innerHTML =
+    '<div class="subj">' + entry.subject + '</div>' +
+    '<div class="time mono">' + entry.start + '–' + entry.end + '</div>' +
+    '<div class="count mono">' + present + '/' + total + '</div>';
+  card.addEventListener('click', () => openModal(entry, dateIso, dateObj, absentList, aStudents));
 
     const col = document.querySelector('.daycol[data-day="'+wd+'"]');
     if(col) col.appendChild(card);
