@@ -277,7 +277,12 @@ const DAY_NAMES = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
 // вторник 1 сентября 2026 года
 const SEMESTER_START = new Date(2026, 8, 1);
 
-let state = { students: [], schedule: [], presences: [], settings: {} };
+let state = {
+    students: [],
+    schedule: [],
+    attendance: [],
+    settings: {}
+  };
 let currentMonday = getMonday(new Date());
 let currentFilter = 'calc'; // all | calc | safety — какое расписание показываем
 
@@ -407,13 +412,29 @@ document.getElementById('weekLabel').innerHTML =
 
     const aStudents = audienceStudents(entry);
     const total = aStudents.length;
-    const presentList = state.presences.filter(p =>
-      p.date === dateIso && String(p.scheduleId) === String(entry.id) &&
-      aStudents.some(s => s.name === p.student)
-    ).map(p => p.student);
+
+    const allowedNames = new Set(
+      aStudents.map(s => s.name)
+    );
+
+    const presentSet = new Set(
+      state.attendance
+        .filter(p =>
+          p.date === dateIso &&
+          String(p.scheduleId) === String(entry.id) &&
+          allowedNames.has(p.student)
+      )
+      .map(p => p.student)
+    );
+
+    const presentList = Array.from(presentSet);
     const present = presentList.length;
-    const ratio = total > 0 ? present/total : 0;
-    const status = ratio < critical ? 'critical' : (ratio < threshold ? 'warn' : 'ok');
+
+    const ratio = total > 0 ? present / total : 0;
+    const status =
+      ratio < critical
+        ? 'critical'
+        : (ratio < threshold ? 'warn' : 'ok');
 
     const typeClass = {
       lecture: 'lecture',
@@ -454,7 +475,13 @@ function openModal(entry, dateIso, dateObj, presentList, aStudents){
 
   const list = document.getElementById('modalList');
   list.innerHTML = "";
-  let presentSet = new Set(presentList);
+  const allowedNames = new Set(
+    aStudents.map(s => s.name)
+  );
+
+  let presentSet = new Set(
+    presentList.filter(name => allowedNames.has(name))
+  );
 
   function refreshCount(){
     const present = presentSet.size;
@@ -477,9 +504,24 @@ function openModal(entry, dateIso, dateObj, presentList, aStudents){
       refreshCount();
 
       // optimistic local update + sync to backend
-      state.presences = state.presences.filter(p => !(p.date===dateIso && String(p.scheduleId)===String(entry.id) && p.student===name));
-      if(nowPresent) state.presences.push({date:dateIso, scheduleId:entry.id, student:name});
-      render();
+      // optimistic local update + sync to backend
+    state.attendance = state.attendance.filter(p =>
+      !(
+        p.date === dateIso &&
+        String(p.scheduleId) === String(entry.id) &&
+        p.student === name
+      )
+    );
+
+    if(nowPresent){
+      state.attendance.push({
+        date: dateIso,
+        scheduleId: entry.id,
+        student: name
+      });
+    }
+
+    render();
 
       try{
         await fetch(APPS_SCRIPT_URL, {
