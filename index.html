@@ -119,18 +119,29 @@
   border-color:var(--text-dim);
   }
 
-/* Статус явки — влияет на фон */
+  /* Низкая посещаемость — заметная оранжевая подсветка */
   .card.warn{
-    background:linear-gradient(var(--warn-bg),var(--warn-bg)),var(--panel);
+    background:
+      linear-gradient(rgba(245, 158, 11, 0.28), rgba(245, 158, 11, 0.28)),
+      var(--panel);
+    border-left-color:#f59e0b;
+    box-shadow:
+      0 0 0 1px rgba(245,158,11,0.55) inset,
+      0 0 12px rgba(245,158,11,0.12);
   }
-
   .card.ok{
     background:linear-gradient(var(--ok-bg),var(--ok-bg)),var(--panel);
   }
 
+  /* Критически низкая посещаемость — яркая красная подсветка */
   .card.critical{
-    background:linear-gradient(var(--critical-bg),var(--critical-bg)),var(--panel);
-    box-shadow:0 0 0 1px rgba(229,83,61,0.35) inset;
+    background:
+      linear-gradient(rgba(239, 68, 68, 0.32), rgba(239, 68, 68, 0.32)),
+      var(--panel);
+    border-left-color:#ef4444;
+    box-shadow:
+      0 0 0 1px rgba(239,68,68,0.7) inset,
+      0 0 14px rgba(239,68,68,0.18);
   }
 
   /* Тип занятия — влияет на левую полоску */
