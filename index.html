@@ -194,8 +194,23 @@
     font-size:11.5px;padding:4px 10px;border-radius:20px;font-family:'IBM Plex Mono',monospace;
     border:1px solid transparent;
   }
-  .pill.present{color:var(--ok);background:var(--ok-bg);border-color:var(--ok);}
-  .pill.absent{color:var(--warn);background:var(--warn-bg);border-color:var(--warn);}
+  .pill.present{
+    color:var(--ok);
+    background:var(--ok-bg);
+    border-color:var(--ok);
+  }
+
+  .pill.absent{
+    color:var(--warn);
+    background:var(--warn-bg);
+    border-color:var(--warn);
+  }
+
+  .pill.unset{
+    color:var(--text-dim);
+    background:rgba(140,160,170,0.08);
+    border-color:var(--text-dim);
+  }
   .modal-foot{
     padding:14px 20px;border-top:1px solid var(--panel-border);
     display:flex;align-items:center;justify-content:space-between;
@@ -556,12 +571,29 @@ document.getElementById('weekLabel').innerHTML =
 
     const aStudents = audienceStudents(entry);
     const total = aStudents.length;
-    const presentList = state.presences.filter(p =>
-      p.date === dateIso && String(p.scheduleId) === String(entry.id) &&
+    const entryPresences = state.presences.filter(p =>
+      p.date === dateIso &&
+      String(p.scheduleId) === String(entry.id) &&
       aStudents.some(s => s.name === p.student)
-    ).map(p => p.student);
+    );
+
+    const presentList = entryPresences
+      .filter(p => String(p.status || 'present') === 'present')
+      .map(p => p.student);
+
     const present = presentList.length;
-    const ratio = total > 0 ? present/total : 0;
+
+    const unset = aStudents.filter(s => {
+      const p = state.presences.find(x =>
+        x.date === dateIso &&
+        String(x.scheduleId) === String(entry.id) &&
+        x.student === s.name
+      );
+
+      return !p;
+    }).length;
+
+    const ratio = total > 0 ? present / total : 0;
     const status = ratio < critical ? 'critical' : (ratio < threshold ? 'warn' : 'ok');
 
     const typeClass = {
@@ -578,7 +610,9 @@ document.getElementById('weekLabel').innerHTML =
   card.innerHTML =
     '<div class="subj">' + entry.subject + '</div>' +
     '<div class="time mono">' + entry.start + '–' + entry.end + '</div>' +
-    '<div class="count mono">' + present + '/' + total + '</div>';
+    '<div class="count mono">' + present + '/' + total +
+      (unset > 0 ? ' · ?' + unset : '') +
+    '</div>';
   card.addEventListener('click', () => openModal(entry, dateIso, dateObj, presentList, aStudents));
 
     const col = document.querySelector('.daycol[data-day="'+wd+'"]');
@@ -594,20 +628,61 @@ function fmtRange(mon, sun){
   return mon.getDate()+" "+months[mon.getMonth()]+" – "+sun.getDate()+" "+months[sun.getMonth()]+" "+sun.getFullYear();
 }
 
-function openModal(entry, dateIso, dateObj, presentList, aStudents){
+function openModal(entry, dateIso, dateObj, presentList, aStudents)function openModal(entry, dateIso, dateObj, presentList, aStudents){
   const overlay = document.getElementById('overlay');
+
   document.getElementById('modalSubject').textContent = entry.subject;
-  const weekdayFull = ["понедельник","вторник","среда","четверг","пятница","суббота","воскресенье"][dateObj.getDay() === 0 ? 6 : dateObj.getDay()-1];
+
+  const weekdayFull = [
+    "понедельник",
+    "вторник",
+    "среда",
+    "четверг",
+    "пятница",
+    "суббота",
+    "воскресенье"
+  ][dateObj.getDay() === 0 ? 6 : dateObj.getDay() - 1];
+
   document.getElementById('modalMeta').textContent =
-    weekdayFull.charAt(0).toUpperCase()+weekdayFull.slice(1) + ", " + dateObj.getDate() + " числа · " + entry.start + '–' + entry.end;
+    weekdayFull.charAt(0).toUpperCase() +
+    weekdayFull.slice(1) +
+    ", " +
+    dateObj.getDate() +
+    " числа · " +
+    entry.start +
+    '–' +
+    entry.end;
 
   const list = document.getElementById('modalList');
   list.innerHTML = "";
-  let presentSet = new Set(presentList);
+
+  function getStatus(name){
+    const presence = state.presences.find(p =>
+      p.date === dateIso &&
+      String(p.scheduleId) === String(entry.id) &&
+      p.student === name
+    );
+
+    if(!presence){
+      return 'unset';
+    }
+
+    return String(presence.status || 'present');
+  }
+
+  function statusText(status){
+    if(status === 'present') return 'придёт';
+    if(status === 'absent') return 'не придёт';
+    return 'не указал';
+  }
 
   function refreshCount(){
-    const present = presentSet.size;
-    document.getElementById('modalCount').textContent = present + "/" + aStudents.length;
+    const present = aStudents.filter(s => {
+      return getStatus(s.name) === 'present';
+    }).length;
+
+    document.getElementById('modalCount').textContent =
+      present + "/" + aStudents.length;
   }
 
   aStudents.forEach(s => {
@@ -622,88 +697,157 @@ function openModal(entry, dateIso, dateObj, presentList, aStudents){
 
     const row = document.createElement('div');
     row.className = 'row' + (canEdit ? '' : ' locked');
-    const isPresent = presentSet.has(name);
-    row.innerHTML = '<span class="name">' + name + '</span>' +
-      '<span class="pill ' + (isPresent ? 'present' : 'absent') + '">' + (isPresent ? 'придёт' : 'отсутствует') + '</span>';
+
+    const status = getStatus(name);
+
+    row.innerHTML =
+      '<span class="name">' + name + '</span>' +
+      '<span class="pill ' + status + '">' +
+        statusText(status) +
+      '</span>';
+
     row.addEventListener('click', async () => {
 
       if(!canEdit) return;
 
-      const nowPresent = !presentSet.has(name);
-      if(nowPresent) presentSet.add(name); else presentSet.delete(name);
-      const pill = row.querySelector('.pill');
-      pill.className = 'pill ' + (nowPresent ? 'present' : 'absent');
-      pill.textContent = nowPresent ? 'придёт' : 'отсутствует';
-      refreshCount();
+      const oldStatus = getStatus(name);
 
-      // optimistic local update + sync to backend
-      state.presences = state.presences.filter(p => !(p.date===dateIso && String(p.scheduleId)===String(entry.id) && p.student===name));
-      if(nowPresent) state.presences.push({date:dateIso, scheduleId:entry.id, student:name});
+      // Цикл:
+      // Не указал → Придёт
+      // Придёт → Не придёт
+      // Не придёт → Придёт
+      let newStatus;
+
+      if(oldStatus === 'unset'){
+        newStatus = 'present';
+      }else if(oldStatus === 'present'){
+        newStatus = 'absent';
+      }else{
+        newStatus = 'present';
+      }
+
+      // Оптимистично меняем локальное состояние
+      state.presences = state.presences.filter(p =>
+        !(
+          p.date === dateIso &&
+          String(p.scheduleId) === String(entry.id) &&
+          p.student === name
+        )
+      );
+
+      state.presences.push({
+        date: dateIso,
+        scheduleId: entry.id,
+        student: name,
+        status: newStatus
+      });
+
+      // Обновляем строку в модальном окне
+      const pill = row.querySelector('.pill');
+      pill.className = 'pill ' + newStatus;
+      pill.textContent = statusText(newStatus);
+
+      refreshCount();
       render();
 
       try{
         const res = await fetch(APPS_SCRIPT_URL, {
           method:'POST',
-          headers:{'Content-Type':'text/plain;charset=utf-8'},
+          headers:{
+            'Content-Type':'text/plain;charset=utf-8'
+          },
           body: JSON.stringify({
             action:'toggle',
             username:currentUser.username,
             date:dateIso,
             scheduleId:entry.id,
-            student:name,
-            present:nowPresent
+            student:name
           })
         });
 
         const data = await res.json();
 
         if(!data.ok){
-          showBanner(data.error || "Не удалось сохранить отметку.");
+          showBanner(
+            data.error || "Не удалось сохранить отметку."
+          );
 
-          // Возвращаем состояние обратно,
-          // если сервер отказал в изменении.
-          if(nowPresent){
-            state.presences = state.presences.filter(p =>
-              !(p.date === dateIso &&
-                String(p.scheduleId) === String(entry.id) &&
-                p.student === name)
-            );
-          }else{
+          // Откатываем локальное состояние
+          state.presences = state.presences.filter(p =>
+            !(
+              p.date === dateIso &&
+              String(p.scheduleId) === String(entry.id) &&
+              p.student === name
+            )
+          );
+
+          if(oldStatus !== 'unset'){
             state.presences.push({
               date:dateIso,
               scheduleId:entry.id,
-              student:name
+              student:name,
+              status:oldStatus
             });
           }
 
           render();
+          return;
         }
 
-      }catch(err){
-        showBanner("Не удалось сохранить отметку — проверь соединение и попробуй ещё раз.");
+        // Сервер вернул фактический статус.
+        // Используем его как окончательное значение.
+        const serverStatus = String(data.status || newStatus);
 
-      if(nowPresent){
         state.presences = state.presences.filter(p =>
-          !(p.date === dateIso &&
-          String(p.scheduleId) === String(entry.id) &&
-          p.student === name)
+          !(
+            p.date === dateIso &&
+            String(p.scheduleId) === String(entry.id) &&
+            p.student === name
+          )
         );
-      }else{
+
         state.presences.push({
           date:dateIso,
           scheduleId:entry.id,
-          student:name
+          student:name,
+          status:serverStatus
         });
-      }
 
-      render();
-    
-    }   
+        render();
+
+      }catch(err){
+
+        showBanner(
+          "Не удалось сохранить отметку — проверь соединение и попробуй ещё раз."
+        );
+
+        // Откатываем состояние
+        state.presences = state.presences.filter(p =>
+          !(
+            p.date === dateIso &&
+            String(p.scheduleId) === String(entry.id) &&
+            p.student === name
+          )
+        );
+
+        if(oldStatus !== 'unset'){
+          state.presences.push({
+            date:dateIso,
+            scheduleId:entry.id,
+            student:name,
+            status:oldStatus
+          });
+        }
+
+        render();
+      }
     });
+
     list.appendChild(row);
   });
 
   refreshCount();
+
   overlay.style.display = 'flex';
 }
 
