@@ -660,17 +660,46 @@ function openProfile(){
   document.getElementById('profileMeta').textContent =
     currentUser.username;
 
+  // -----------------------------
+  // Email
+  // -----------------------------
+
   document.getElementById('profileEmail').value =
     currentUser.email || '';
 
-  const status = document.getElementById('emailStatus');
+  const emailStatus =
+    document.getElementById('emailStatus');
 
   if(currentUser.email){
-    status.textContent = '✓ Email подключён';
-    status.className = 'profile-status ok';
+    emailStatus.textContent = '✓ Email подключён';
+    emailStatus.className = 'profile-status ok';
   }else{
-    status.textContent = '';
-    status.className = 'profile-status';
+    emailStatus.textContent = '';
+    emailStatus.className = 'profile-status';
+  }
+
+  // -----------------------------
+  // Telegram
+  // -----------------------------
+
+  const telegramStatus =
+    document.getElementById('telegramStatus');
+
+  const telegramButton =
+    document.getElementById('connectTelegramBtn');
+
+  if(currentUser.telegramChatId){
+    telegramStatus.textContent = '✓ Telegram подключён';
+    telegramStatus.className = 'profile-status ok';
+
+    telegramButton.textContent = 'Telegram подключён';
+    telegramButton.disabled = true;
+  }else{
+    telegramStatus.textContent = '';
+    telegramStatus.className = 'profile-status';
+
+    telegramButton.textContent = 'Подключить Telegram';
+    telegramButton.disabled = false;
   }
 
   document.getElementById('profileOverlay').style.display = 'flex';
