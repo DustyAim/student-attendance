@@ -509,6 +509,21 @@
           id="emailStatus"
         ></div>
       </div>
+      <div class="profile-section">
+        <div class="profile-label">Telegram</div>
+
+      <button
+        class="profile-save-btn"
+        id="connectTelegramBtn"
+      >
+      Подключить Telegram
+      </button>
+
+      <div
+        class="profile-status"
+        id="telegramStatus"
+      ></div>
+    </div>
 
     </div>
 
@@ -731,6 +746,71 @@ async function saveEmail(){
   }
 }
 
+async function connectTelegram(){
+  if(!currentUser) return;
+
+  const button =
+    document.getElementById('connectTelegramBtn');
+
+  const status =
+    document.getElementById('telegramStatus');
+
+  button.disabled = true;
+  button.textContent = 'Создание ссылки...';
+  status.textContent = '';
+  status.className = 'profile-status';
+
+  try{
+
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method:'POST',
+      headers:{
+        'Content-Type':'text/plain;charset=utf-8'
+      },
+      body:JSON.stringify({
+        action:'connectTelegram',
+        username:currentUser.username
+      })
+    });
+
+    const data = await res.json();
+
+    if(!data.ok){
+      status.textContent =
+        data.error || 'Не удалось создать ссылку';
+
+      status.className =
+        'profile-status error';
+
+      return;
+    }
+
+    window.open(
+      data.link,
+      '_blank'
+    );
+
+    status.textContent =
+      'Откройте Telegram и нажмите Start у бота.';
+
+    status.className =
+      'profile-status';
+
+  }catch(err){
+
+    status.textContent =
+      'Не удалось связаться с сервером';
+
+    status.className =
+      'profile-status error';
+
+  }finally{
+
+    button.disabled = false;
+    button.textContent = 'Подключить Telegram';
+  }
+}
+
 
 
 
@@ -776,6 +856,10 @@ document.getElementById('profileOverlay')
       document.getElementById('profileOverlay').style.display = 'none';
     }
   });
+
+document.getElementById('connectTelegramBtn')
+  .addEventListener('click', connectTelegram);
+  
 
 
 
