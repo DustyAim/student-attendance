@@ -7,6 +7,110 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+  .user-panel{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-left:auto;
+  }
+
+  .user-info{
+    text-align:right;
+    line-height:1.2;
+  }
+
+  .user-name{
+    font-size:13px;
+    font-weight:500;
+  }
+
+  .user-role{
+    margin-top:3px;
+    font-size:11px;
+    color:var(--text-dim);
+  }
+
+  .profile-btn{
+    border:1px solid var(--panel-border);
+    background:var(--panel);
+    color:var(--text);
+    padding:7px 12px;
+    border-radius:8px;
+    font-family:inherit;
+    font-size:12.5px;
+    cursor:pointer;
+  }
+
+  .profile-btn:hover{
+    border-color:var(--text-dim);
+  }
+  .profile-body{
+  padding:18px 20px;
+}
+
+.profile-section{
+  margin-bottom:10px;
+}
+
+.profile-label{
+  font-size:12px;
+  color:var(--text-dim);
+  margin-bottom:7px;
+}
+
+.profile-email-row{
+  display:flex;
+  gap:8px;
+}
+
+.profile-input{
+  flex:1;
+  min-width:0;
+  padding:9px 10px;
+  border:1px solid var(--panel-border);
+  border-radius:8px;
+  background:var(--bg);
+  color:var(--text);
+  font-family:inherit;
+  font-size:13px;
+  outline:none;
+}
+
+.profile-input:focus{
+  border-color:var(--text-dim);
+}
+
+.profile-save-btn{
+  border:1px solid var(--panel-border);
+  background:var(--panel-border);
+  color:var(--text);
+  padding:8px 12px;
+  border-radius:8px;
+  font-family:inherit;
+  font-size:12.5px;
+  cursor:pointer;
+  white-space:nowrap;
+}
+
+.profile-save-btn:hover{
+  border-color:var(--text-dim);
+}
+
+.profile-status{
+  margin-top:8px;
+  font-size:12px;
+  color:var(--text-dim);
+  min-height:16px;
+}
+
+.profile-status.ok{
+  color:var(--ok);
+}
+
+.profile-status.error{
+  color:var(--critical);
+}
+
   :root{
     --bg:#0E1418;
     --panel:#161F26;
@@ -326,6 +430,17 @@
 </div>
 
 <header>
+  <div class="user-panel" id="userPanel">
+  <div class="user-info">
+    <div class="user-name" id="userName">—</div>
+    <div class="user-role" id="userRole">—</div>
+  </div>
+
+  <button class="profile-btn" id="profileBtn">
+    Профиль
+  </button>
+</div>
+
   <div class="nav">
     <button class="navbtn" id="prevBtn">‹</button>
     <button class="navbtn" id="nextBtn">›</button>
@@ -358,6 +473,52 @@
       <div class="daycol grid-height" data-day="6"></div>
       <div class="daycol grid-height" data-day="7"></div>
     </div>
+  </div>
+</div>
+<div class="overlay" id="profileOverlay">
+  <div class="modal profile-modal">
+
+    <div class="modal-head">
+      <h3>Профиль</h3>
+      <div class="meta" id="profileMeta">—</div>
+    </div>
+
+    <div class="profile-body">
+
+      <div class="profile-section">
+        <div class="profile-label">Email</div>
+
+        <div class="profile-email-row">
+          <input
+            type="email"
+            id="profileEmail"
+            class="profile-input"
+            placeholder="Введите email"
+          >
+
+          <button
+            class="profile-save-btn"
+            id="saveEmailBtn"
+          >
+            Подключить
+          </button>
+        </div>
+
+        <div
+          class="profile-status"
+          id="emailStatus"
+        ></div>
+      </div>
+
+    </div>
+
+    <div class="modal-foot">
+      <div></div>
+      <button class="closebtn" id="closeProfileBtn">
+        Закрыть
+      </button>
+    </div>
+
   </div>
 </div>
 
@@ -472,6 +633,105 @@ async function login(){
   }
 }
 
+function openProfile(){
+  if(!currentUser) return;
+
+  document.getElementById('userName').textContent =
+    currentUser.student || currentUser.username;
+
+  document.getElementById('userRole').textContent =
+    currentUser.role;
+
+  document.getElementById('profileMeta').textContent =
+    currentUser.username;
+
+  document.getElementById('profileEmail').value =
+    currentUser.email || '';
+
+  const status = document.getElementById('emailStatus');
+
+  if(currentUser.email){
+    status.textContent = '✓ Email подключён';
+    status.className = 'profile-status ok';
+  }else{
+    status.textContent = '';
+    status.className = 'profile-status';
+  }
+
+  document.getElementById('profileOverlay').style.display = 'flex';
+}
+
+async function saveEmail(){
+  if(!currentUser) return;
+
+  const input = document.getElementById('profileEmail');
+  const status = document.getElementById('emailStatus');
+  const button = document.getElementById('saveEmailBtn');
+
+  const email = input.value.trim();
+
+  if(!email){
+    status.textContent = 'Введите email';
+    status.className = 'profile-status error';
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = 'Сохранение...';
+
+  status.textContent = '';
+
+  try{
+
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method:'POST',
+      headers:{
+        'Content-Type':'text/plain;charset=utf-8'
+      },
+      body:JSON.stringify({
+        action:'connectEmail',
+        username:currentUser.username,
+        email:email
+      })
+    });
+
+    const data = await res.json();
+
+    if(!data.ok){
+      status.textContent =
+        data.error || 'Не удалось подключить email';
+
+      status.className = 'profile-status error';
+      return;
+    }
+
+    // Сохраняем актуальные данные локально
+    currentUser.email = data.email;
+    currentUser.emailConnectedAt = data.connectedAt;
+
+    status.textContent = '✓ Email подключён';
+    status.className = 'profile-status ok';
+
+    button.textContent = 'Сохранено';
+
+  }catch(err){
+
+    status.textContent =
+      'Не удалось связаться с сервером';
+
+    status.className = 'profile-status error';
+
+  }finally{
+
+    button.disabled = false;
+
+    if(button.textContent === 'Сохранение...'){
+      button.textContent = 'Подключить';
+    }
+  }
+}
+
+
 
 
 async function loadData(){
@@ -498,6 +758,26 @@ document.getElementById('loginBtn').addEventListener('click', login);
 document.getElementById('loginPassword').addEventListener('keydown', (e) => {
   if(e.key === 'Enter') login();
 });
+
+document.getElementById('profileBtn')
+  .addEventListener('click', openProfile);
+
+document.getElementById('saveEmailBtn')
+  .addEventListener('click', saveEmail);
+
+document.getElementById('closeProfileBtn')
+  .addEventListener('click', () => {
+    document.getElementById('profileOverlay').style.display = 'none';
+  });
+
+document.getElementById('profileOverlay')
+  .addEventListener('click', (e) => {
+    if(e.target.id === 'profileOverlay'){
+      document.getElementById('profileOverlay').style.display = 'none';
+    }
+  });
+
+
 
 
 function showBanner(msg){
