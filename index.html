@@ -535,6 +535,19 @@ function audienceStudents(entry){
   return state.students;
 }
 
+// Статус студента на пару: 'present' | 'absent' | 'unset'.
+// Если в таблице оказалось несколько строк на одну пару, берём первую —
+// ровно её меняет сервер при клике. Карточка и окно считают через эту функцию,
+// поэтому числа всегда совпадают и не могут превысить число студентов.
+function getPresenceStatus(dateIso, entryId, name){
+  const p = state.presences.find(x =>
+    x.date === dateIso &&
+    String(x.scheduleId) === String(entryId) &&
+    x.student === name
+  );
+  return p ? String(p.status || 'present') : 'unset';
+}
+
 function pad(n){ return n < 10 ? "0"+n : ""+n; }
 function isoDate(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
 function getMonday(d){
@@ -866,27 +879,14 @@ document.getElementById('weekLabel').innerHTML =
 
     const aStudents = audienceStudents(entry);
     const total = aStudents.length;
-    const entryPresences = state.presences.filter(p =>
-      p.date === dateIso &&
-      String(p.scheduleId) === String(entry.id) &&
-      aStudents.some(s => s.name === p.student)
-    );
+    const statuses = aStudents.map(s => getPresenceStatus(dateIso, entry.id, s.name));
 
-    const presentList = entryPresences
-      .filter(p => String(p.status || 'present') === 'present')
-      .map(p => p.student);
+    const presentList = aStudents
+      .filter((s, i) => statuses[i] === 'present')
+      .map(s => s.name);
 
     const present = presentList.length;
-
-    const unset = aStudents.filter(s => {
-      const p = state.presences.find(x =>
-        x.date === dateIso &&
-        String(x.scheduleId) === String(entry.id) &&
-        x.student === s.name
-      );
-
-      return !p;
-    }).length;
+    const unset = statuses.filter(x => x === 'unset').length;
 
     const ratio = total > 0 ? present / total : 0;
     const status = ratio < critical ? 'critical' : (ratio < threshold ? 'warn' : 'ok');
@@ -952,17 +952,7 @@ function openModal(entry, dateIso, dateObj, presentList, aStudents){
   list.innerHTML = "";
 
   function getStatus(name){
-    const presence = state.presences.find(p =>
-      p.date === dateIso &&
-      String(p.scheduleId) === String(entry.id) &&
-      p.student === name
-    );
-
-    if(!presence){
-      return 'unset';
-    }
-
-    return String(presence.status || 'present');
+    return getPresenceStatus(dateIso, entry.id, name);
   }
 
   function statusText(status){
