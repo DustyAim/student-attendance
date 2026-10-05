@@ -439,6 +439,10 @@
   <button class="profile-btn" id="profileBtn">
     Профиль
   </button>
+
+  <button class="profile-btn" id="logoutBtn">
+    Выйти
+  </button>
 </div>
 
   <div class="nav">
@@ -637,6 +641,8 @@ async function login(){
     }
 
     currentUser = data.user;
+    saveSession();
+    applyUser();
 
     document.getElementById('loginOverlay').style.display = 'none';
 
@@ -648,14 +654,44 @@ async function login(){
   }
 }
 
+// ======= СЕССИЯ =======
+const SESSION_KEY = 'attendance_user';
+
+function saveSession(){
+  // пароль не храним — только данные пользователя
+  try{ localStorage.setItem(SESSION_KEY, JSON.stringify(currentUser)); }catch(e){}
+}
+
+function restoreSession(){
+  try{
+    const raw = localStorage.getItem(SESSION_KEY);
+    if(!raw) return false;
+    const u = JSON.parse(raw);
+    if(!u || !u.username) return false;
+    currentUser = u;
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+
+function logout(){
+  try{ localStorage.removeItem(SESSION_KEY); }catch(e){}
+  location.reload();
+}
+
+function applyUser(){
+  document.getElementById('userName').textContent =
+    currentUser.student || currentUser.username;
+  document.getElementById('userRole').textContent =
+    currentUser.role;
+}
+// ======================
+
 function openProfile(){
   if(!currentUser) return;
 
-  document.getElementById('userName').textContent =
-    currentUser.student || currentUser.username;
-
-  document.getElementById('userRole').textContent =
-    currentUser.role;
+  applyUser();
 
   document.getElementById('profileMeta').textContent =
     currentUser.username;
@@ -752,6 +788,7 @@ async function saveEmail(){
     // Сохраняем актуальные данные локально
     currentUser.email = data.email;
     currentUser.emailConnectedAt = data.connectedAt;
+    saveSession();
 
     status.textContent = '✓ Email подключён';
     status.className = 'profile-status ok';
@@ -870,6 +907,9 @@ document.getElementById('loginPassword').addEventListener('keydown', (e) => {
 
 document.getElementById('profileBtn')
   .addEventListener('click', openProfile);
+
+document.getElementById('logoutBtn')
+  .addEventListener('click', logout);
 
 document.getElementById('saveEmailBtn')
   .addEventListener('click', saveEmail);
@@ -1253,6 +1293,13 @@ document.getElementById('overlay').addEventListener('click', (e) => {
 document.getElementById('prevBtn').addEventListener('click', () => { currentMonday = addDays(currentMonday, -7); render(); });
 document.getElementById('nextBtn').addEventListener('click', () => { currentMonday = addDays(currentMonday, 7); render(); });
 document.getElementById('todayBtn').addEventListener('click', () => { currentMonday = getMonday(new Date()); render(); });
+
+// Автовход, если сессия сохранена
+if(restoreSession()){
+  document.getElementById('loginOverlay').style.display = 'none';
+  applyUser();
+  loadData();
+}
 
 document.getElementById('audienceToggle').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-aud]');
