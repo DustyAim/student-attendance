@@ -58,28 +58,6 @@
   margin-bottom:7px;
 }
 
-.profile-email-row{
-  display:flex;
-  gap:8px;
-}
-
-.profile-input{
-  flex:1;
-  min-width:0;
-  padding:9px 10px;
-  border:1px solid var(--panel-border);
-  border-radius:8px;
-  background:var(--bg);
-  color:var(--text);
-  font-family:inherit;
-  font-size:13px;
-  outline:none;
-}
-
-.profile-input:focus{
-  border-color:var(--text-dim);
-}
-
 .profile-save-btn{
   border:1px solid var(--panel-border);
   background:var(--panel-border);
@@ -490,30 +468,6 @@
     <div class="profile-body">
 
       <div class="profile-section">
-        <div class="profile-label">Email</div>
-
-        <div class="profile-email-row">
-          <input
-            type="email"
-            id="profileEmail"
-            class="profile-input"
-            placeholder="Введите email"
-          >
-
-          <button
-            class="profile-save-btn"
-            id="saveEmailBtn"
-          >
-            Подключить
-          </button>
-        </div>
-
-        <div
-          class="profile-status"
-          id="emailStatus"
-        ></div>
-      </div>
-      <div class="profile-section">
         <div class="profile-label">Telegram</div>
 
       <button
@@ -697,24 +651,6 @@ function openProfile(){
     currentUser.username;
 
   // -----------------------------
-  // Email
-  // -----------------------------
-
-  document.getElementById('profileEmail').value =
-    currentUser.email || '';
-
-  const emailStatus =
-    document.getElementById('emailStatus');
-
-  if(currentUser.email){
-    emailStatus.textContent = '✓ Email подключён';
-    emailStatus.className = 'profile-status ok';
-  }else{
-    emailStatus.textContent = '';
-    emailStatus.className = 'profile-status';
-  }
-
-  // -----------------------------
   // Telegram
   // -----------------------------
 
@@ -739,77 +675,6 @@ function openProfile(){
   }
 
   document.getElementById('profileOverlay').style.display = 'flex';
-}
-
-async function saveEmail(){
-  if(!currentUser) return;
-
-  const input = document.getElementById('profileEmail');
-  const status = document.getElementById('emailStatus');
-  const button = document.getElementById('saveEmailBtn');
-
-  const email = input.value.trim();
-
-  if(!email){
-    status.textContent = 'Введите email';
-    status.className = 'profile-status error';
-    return;
-  }
-
-  button.disabled = true;
-  button.textContent = 'Сохранение...';
-
-  status.textContent = '';
-
-  try{
-
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method:'POST',
-      headers:{
-        'Content-Type':'text/plain;charset=utf-8'
-      },
-      body:JSON.stringify({
-        action:'connectEmail',
-        username:currentUser.username,
-        email:email
-      })
-    });
-
-    const data = await res.json();
-
-    if(!data.ok){
-      status.textContent =
-        data.error || 'Не удалось подключить email';
-
-      status.className = 'profile-status error';
-      return;
-    }
-
-    // Сохраняем актуальные данные локально
-    currentUser.email = data.email;
-    currentUser.emailConnectedAt = data.connectedAt;
-    saveSession();
-
-    status.textContent = '✓ Email подключён';
-    status.className = 'profile-status ok';
-
-    button.textContent = 'Сохранено';
-
-  }catch(err){
-
-    status.textContent =
-      'Не удалось связаться с сервером';
-
-    status.className = 'profile-status error';
-
-  }finally{
-
-    button.disabled = false;
-
-    if(button.textContent === 'Сохранение...'){
-      button.textContent = 'Подключить';
-    }
-  }
 }
 
 async function connectTelegram(){
@@ -910,9 +775,6 @@ document.getElementById('profileBtn')
 
 document.getElementById('logoutBtn')
   .addEventListener('click', logout);
-
-document.getElementById('saveEmailBtn')
-  .addEventListener('click', saveEmail);
 
 document.getElementById('closeProfileBtn')
   .addEventListener('click', () => {
